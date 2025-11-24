@@ -39,7 +39,10 @@ export default function InputArea({
 
   const startRecording = async () => {
     try {
+      console.log('🎙️ [Recording] Requesting microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ [Recording] Microphone access granted');
+
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm',
       });
@@ -49,20 +52,24 @@ export default function InputArea({
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
+          console.log('📊 [Recording] Chunk received:', event.data.size, 'bytes');
           chunksRef.current.push(event.data);
         }
       };
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        console.log('🛑 [Recording] Recording stopped. Total chunks:', chunksRef.current.length);
+        console.log('📦 [Recording] Audio blob created:', audioBlob.size, 'bytes');
         await sendAudioToServer(audioBlob);
         stream.getTracks().forEach((track) => track.stop());
       };
 
       mediaRecorder.start();
       setIsRecording(true);
+      console.log('▶️ [Recording] Recording started');
     } catch (error) {
-      console.error('Error accessing microphone:', error);
+      console.error('❌ [Recording] Error accessing microphone:', error);
       alert(t.errorMicrophone);
     }
   };
@@ -77,27 +84,46 @@ export default function InputArea({
 
   const sendAudioToServer = async (audioBlob: Blob) => {
     try {
+      console.log('🎤 [Audio] Preparing to send audio:', {
+        size: audioBlob.size,
+        type: audioBlob.type,
+      });
+
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
+
+      console.log('📤 [Audio] Sending to /api/transcribe...');
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
         body: formData,
       });
 
+      console.log('📥 [Audio] Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Transcription failed');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ [Audio] Transcription failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+        });
+        throw new Error(`Transcription failed: ${errorData.error || response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('✅ [Audio] Transcription response:', data);
+
       if (data.text) {
+        console.log('📝 [Audio] Transcribed text:', data.text);
         onSendMessage(data.text);
       } else if (data.error) {
+        console.error('❌ [Audio] API returned error:', data.error);
         alert(`${t.errorTranscription}: ${data.error}`);
       }
     } catch (error) {
-      console.error('Transcription error:', error);
-      alert(t.errorTranscription);
+      console.error('❌ [Audio] Transcription error:', error);
+      alert(t.errorTranscription + ': ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsProcessing(false);
     }

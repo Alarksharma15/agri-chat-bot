@@ -20,6 +20,8 @@ export default function Home() {
 
   const sendMessageToAI = useCallback(
     async (userMessage: string) => {
+      console.log('📨 [Main] Sending message to AI:', userMessage);
+
       // Add user message
       const userMessageObj: Message = {
         id: Date.now().toString(),
@@ -32,6 +34,7 @@ export default function Home() {
       setIsLoadingChat(true);
 
       try {
+        console.log('📤 [Main] Fetching /api/chat...');
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -42,39 +45,42 @@ export default function Home() {
           }),
         });
 
+        console.log('📥 [Main] Response status:', response.status);
+
         if (!response.ok) {
-          throw new Error('Chat request failed');
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('❌ [Main] Chat request failed:', errorData);
+          throw new Error('Chat request failed: ' + (errorData.error || response.statusText));
         }
 
         // Read the streaming response
+        console.log('📖 [Main] Reading streaming response...');
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
         let aiResponse = '';
 
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
-
-            for (const line of lines) {
-              if (line.startsWith('0:')) {
-                // Extract the text content from the data stream
-                const jsonStr = line.substring(2);
-                try {
-                  const parsed = JSON.parse(jsonStr);
-                  if (typeof parsed === 'string') {
-                    aiResponse += parsed;
-                  }
-                } catch (e) {
-                  // Skip invalid JSON
-                }
-              }
-            }
-          }
+        if (!reader) {
+          console.error('❌ [Main] No reader available from response.body');
+          throw new Error('No response body reader');
         }
+
+        console.log('✅ [Main] Starting stream...');
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            console.log('✅ [Main] Stream complete! Total response length:', aiResponse.length);
+            break;
+          }
+
+          // Decode the chunk - toTextStreamResponse sends plain text
+          const chunk = decoder.decode(value, { stream: true });
+          aiResponse += chunk;
+          console.log('📝 [Main] Received:', chunk);
+        }
+
+        console.log('💬 [Main] AI Response:', aiResponse.substring(0, 100) + '...');
 
         // Add AI response message
         const aiMessageObj: Message = {
@@ -85,13 +91,13 @@ export default function Home() {
         };
         setMessages((prev) => [...prev, aiMessageObj]);
       } catch (error) {
-        console.error('Chat error:', error);
+        console.error('❌ [Main] Chat error:', error);
         
         // Add error message
         const errorMessageObj: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: t.errorChat,
+          content: t.errorChat + (error instanceof Error ? ': ' + error.message : ''),
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessageObj]);

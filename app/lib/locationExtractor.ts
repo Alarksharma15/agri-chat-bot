@@ -123,15 +123,22 @@ export function extractLocation(message: string): string | null {
 }
 
 /**
- * Check if message is asking about weather
+ * Check if message is asking about weather or agriculture activities that need weather context
  */
 export function isWeatherQuery(message: string): boolean {
   const weatherKeywords = [
-    // English
+    // English - Weather
     'weather', 'temperature', 'rain', 'sunny', 'cloud', 'wind', 'forecast',
-    'hot', 'cold', 'warm', 'humid',
-    // Japanese
-    '天気', '気温', '雨', '晴れ', '曇り', '風', '予報', '暑い', '寒い', '湿度'
+    'hot', 'cold', 'warm', 'humid', 'climate',
+    // English - Agriculture (weather-dependent)
+    'plant', 'planting', 'sow', 'sowing', 'harvest', 'harvesting',
+    'irrigation', 'water', 'fertilize', 'spray', 'crop', 'farm', 'field',
+    'grow', 'growing', 'outdoor', 'work outside',
+    // Japanese - Weather
+    '天気', '気温', '雨', '晴れ', '曇り', '風', '予報', '暑い', '寒い', '湿度', '気候',
+    // Japanese - Agriculture (weather-dependent)
+    '種', '種まき', '植え', '収穫', '灌漑', '水やり', '肥料', '農作業', '畑', '田んぼ',
+    '栽培', '作物', '野菜', '稲', '米', '農業', '農家', '外作業', '屋外'
   ];
   
   const lowerMessage = message.toLowerCase();

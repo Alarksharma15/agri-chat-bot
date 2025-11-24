@@ -106,7 +106,10 @@ async function fetchWeatherData(city: string): Promise<WeatherData | null> {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('💬 [Chat API] Chat endpoint called');
+
     if (!process.env.GROQ_API_KEY) {
+      console.error('❌ [Chat API] GROQ_API_KEY is not configured');
       return NextResponse.json(
         { error: 'GROQ_API_KEY is not configured' },
         { status: 500 }
@@ -116,7 +119,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { message } = body as { message: string };
 
+    console.log('📝 [Chat API] Received message:', message);
+
     if (!message) {
+      console.error('❌ [Chat API] No message provided');
       return NextResponse.json(
         { error: 'Message is required' },
         { status: 400 }
@@ -129,10 +135,20 @@ export async function POST(request: NextRequest) {
 
     // Extract location from message
     const location = extractLocation(message);
+    console.log('📍 [Chat API] Extracted location:', location);
+    
+    const isWeatherQ = isWeatherQuery(message);
+    console.log('🌤️ [Chat API] Is weather query:', isWeatherQ);
     
     // If location found and it's a weather query, fetch weather data
-    if (location && isWeatherQuery(message)) {
+    if (location && isWeatherQ) {
+      console.log('🔍 [Chat API] Fetching weather for:', location);
       weatherData = await fetchWeatherData(location);
+      if (weatherData) {
+        console.log('✅ [Chat API] Weather data fetched:', weatherData.location);
+      } else {
+        console.warn('⚠️ [Chat API] Failed to fetch weather data');
+      }
     }
 
     // Build context with weather data if available
@@ -159,6 +175,8 @@ ${forecastSummary}
 ユーザーの質問: ${message}`;
     }
 
+    console.log('🤖 [Chat API] Calling Llama 3.3 70B...');
+
     // Stream response from Groq Llama 3.3 70b
     const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
@@ -172,10 +190,16 @@ ${forecastSummary}
       temperature: 0.7,
     });
 
+    console.log('✅ [Chat API] Streaming response started');
+
     // Return streaming response
     return result.toTextStreamResponse();
   } catch (error: any) {
-    console.error('Chat API error:', error);
+    console.error('❌ [Chat API] Error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
     return NextResponse.json(
       { error: error.message || 'Failed to generate response' },
       { status: 500 }
