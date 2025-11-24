@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText } from 'ai';
-import type { WeatherData } from '@/app/lib/types';
+import axios from 'axios';
+import { extractLocation, isWeatherQuery } from '@/app/lib/locationExtractor';
+import type { WeatherData, OpenWeatherCurrentResponse, OpenWeatherForecastResponse, ForecastDay } from '@/app/lib/types';
 
 function getGroqProvider() {
   return createOpenAI({
@@ -19,12 +21,88 @@ const AGRICULTURE_SYSTEM_PROMPT = `あなたは日本の農業専門家です。
 - 気象パターンに基づいた最適な農作業のタイミングを推奨する
 
 ガイドライン:
-- すべての回答は日本語で提供する
+- ユーザーが日本語で話しかけた場合は日本語で、英語で話しかけた場合は英語で返答する
 - 天気データを考慮に入れた具体的で実用的なアドバイスを提供する
 - 農家や家庭菜園をする人に役立つ情報を共有する
 - 温度、湿度、風速、降水量などの気象要因を考慮する
 - 季節に応じた適切な作物や活動を提案する
 - 親しみやすく、分かりやすい言葉で説明する`;
+
+async function fetchWeatherData(city: string): Promise<WeatherData | null> {
+  try {
+    const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
+    const OPENWEATHER_BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
+    if (!OPENWEATHER_API_KEY) {
+      console.error('OpenWeather API key not configured');
+      return null;
+    }
+
+    const weatherParams = {
+      q: city,
+      appid: OPENWEATHER_API_KEY,
+      units: 'metric',
+      lang: 'ja',
+    };
+
+    // Fetch current weather
+    const currentWeatherResponse = await axios.get<OpenWeatherCurrentResponse>(
+      `${OPENWEATHER_BASE_URL}/weather`,
+      { params: weatherParams }
+    );
+
+    const current = currentWeatherResponse.data;
+
+    // Fetch 5-day forecast
+    const forecastResponse = await axios.get<OpenWeatherForecastResponse>(
+      `${OPENWEATHER_BASE_URL}/forecast`,
+      { params: weatherParams }
+    );
+
+    // Process forecast data
+    const forecastData: ForecastDay[] = [];
+    const processedDates = new Set<string>();
+
+    forecastResponse.data.list.forEach((item) => {
+      const date = new Date(item.dt * 1000);
+      const dateStr = date.toISOString().split('T')[0];
+      const hour = date.getHours();
+
+      if (
+        !processedDates.has(dateStr) &&
+        hour >= 11 &&
+        hour <= 13 &&
+        forecastData.length < 5
+      ) {
+        processedDates.add(dateStr);
+        forecastData.push({
+          date: dateStr,
+          tempMin: item.main.temp_min,
+          tempMax: item.main.temp_max,
+          description: item.weather[0].description,
+          icon: item.weather[0].icon,
+          humidity: item.main.humidity,
+          windSpeed: item.wind.speed,
+        });
+      }
+    });
+
+    return {
+      location: current.name,
+      country: current.sys.country,
+      temperature: Math.round(current.main.temp),
+      feelsLike: Math.round(current.main.feels_like),
+      humidity: current.main.humidity,
+      windSpeed: current.wind.speed,
+      description: current.weather[0].description,
+      icon: current.weather[0].icon,
+      forecast: forecastData,
+    };
+  } catch (error: any) {
+    console.error('Weather fetch error:', error.response?.data || error.message);
+    return null;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,10 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { message, weatherData } = body as {
-      message: string;
-      weatherData?: WeatherData;
-    };
+    const { message } = body as { message: string };
 
     if (!message) {
       return NextResponse.json(
@@ -49,9 +124,18 @@ export async function POST(request: NextRequest) {
     }
 
     const groq = getGroqProvider();
-
-    // Build context with weather data
     let contextMessage = message;
+    let weatherData: WeatherData | null = null;
+
+    // Extract location from message
+    const location = extractLocation(message);
+    
+    // If location found and it's a weather query, fetch weather data
+    if (location && isWeatherQuery(message)) {
+      weatherData = await fetchWeatherData(location);
+    }
+
+    // Build context with weather data if available
     if (weatherData) {
       const forecastSummary = weatherData.forecast
         ? weatherData.forecast
@@ -98,4 +182,3 @@ ${forecastSummary}
     );
   }
 }
-
