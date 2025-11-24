@@ -1,15 +1,26 @@
 # 農業アドバイザー (Agriculture Advisor Chatbot)
 
-A Next.js-based Japanese voice-enabled weather chatbot that provides AI-powered agricultural advice using Groq's Llama 3.3 70B and OpenWeather API.
+A Next.js-based conversational chatbot with Japanese voice support that provides AI-powered agricultural advice using Groq's Llama 3.3 70B and OpenWeather API.
 
 ## Features
 
+- 💬 **Conversational Interface**: Natural chat experience - just ask about weather in any city
 - 🎤 **Japanese Voice Input**: Record your questions in Japanese using the browser's MediaRecorder API
-- 🌤️ **Real-time Weather Data**: Get current weather and 5-day forecasts from OpenWeather API
-- 🤖 **AI-Powered Advice**: Receive contextual agricultural recommendations from Llama 3.3 70B
-- 🌾 **Agriculture Focus**: Get suggestions for farming, crop management, irrigation, and planting schedules
+- ⌨️ **Text Input**: Type your questions in Japanese or English
+- 🌍 **Automatic Location Detection**: Bot extracts city names from your questions automatically
+- 🌤️ **Real-time Weather**: Fetches current weather and 5-day forecasts from OpenWeather API
+- 🤖 **AI-Powered Advice**: Contextual agricultural recommendations from Llama 3.3 70B
+- 🌾 **Agriculture Focus**: Specialized advice for farming, crop management, irrigation, and planting
+- 🌐 **Bilingual UI**: Toggle between Japanese and English interface languages
 - 📱 **Responsive Design**: Works seamlessly on desktop and mobile devices
 - 🌓 **Dark Mode**: Automatic dark mode support based on system preferences
+
+## How It Works
+
+1. **User asks naturally**: "What's the weather in Tokyo?" or "京都の天気はどうですか？"
+2. **Bot extracts location**: Automatically detects "Tokyo" or "京都" from your question
+3. **Fetches weather**: Gets real-time weather data if it's a weather-related query
+4. **AI responds**: Provides agricultural advice based on weather conditions
 
 ## Tech Stack
 
@@ -65,24 +76,40 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Usage
 
-1. **Set Location**: Click the "場所を変更" (Change Location) button to set your location (default: Tokyo)
+### Text Input
+1. Click **"Text Input"** button (default mode)
+2. Type your question about weather in any city
+3. Press Enter or click Send
+4. Get AI-powered agricultural advice!
 
-2. **Load Weather**: Click "天気を取得" (Get Weather) to fetch current weather and forecast data
+### Voice Input
+1. Click **"Voice Input"** button to switch modes
+2. Click the green microphone button to start recording
+3. Speak your question in Japanese
+4. Click again to stop recording
+5. Audio will be automatically transcribed and processed
 
-3. **Voice Input**: 
-   - Click the green microphone button to start recording
-   - Speak your question in Japanese
-   - Click again to stop recording
-   - The audio will be automatically transcribed and sent to the AI
+### Language Toggle
+- Click the **EN/JP** button in the header to switch UI language
+- Chat responses will be in the language you speak (Japanese or English)
 
-4. **Get Advice**: The AI will analyze the weather data and provide agricultural recommendations in Japanese
+## Example Questions
 
-## Example Questions (in Japanese)
+### English
+```
+What's the weather in Tokyo?
+Should I plant rice in Kyoto today?
+Is it good for irrigation in Osaka?
+Will it rain in Sapporo tomorrow?
+```
 
-- "今日は種まきに適していますか？" (Is today suitable for sowing?)
-- "この天気で灌漑は必要ですか？" (Do I need irrigation in this weather?)
-- "明日の天気で外作業はできますか？" (Can I work outside in tomorrow's weather?)
-- "今週は害虫対策が必要ですか？" (Do I need pest control this week?)
+### Japanese
+```
+東京の天気はどうですか？
+京都で今日種まきをすべきですか？
+大阪で灌漑が必要ですか？
+札幌で明日雨が降りますか？
+```
 
 ## Project Structure
 
@@ -90,14 +117,15 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 app/
 ├── api/
 │   ├── transcribe/route.ts    # Groq Whisper transcription endpoint
-│   ├── weather/route.ts        # OpenWeather API integration
-│   └── chat/route.ts           # Groq Llama 3.3 chat endpoint
+│   ├── weather/route.ts        # OpenWeather API integration (legacy)
+│   └── chat/route.ts           # Groq Llama 3.3 with location extraction & weather
 ├── components/
-│   ├── VoiceRecorder.tsx       # Voice recording component
-│   ├── ChatInterface.tsx       # Chat message display
-│   └── WeatherCard.tsx         # Weather information display
+│   ├── InputArea.tsx           # Text/Voice input with mode toggle
+│   └── ChatInterface.tsx       # Chat message display
 ├── lib/
-│   └── types.ts                # TypeScript type definitions
+│   ├── types.ts                # TypeScript type definitions
+│   ├── translations.ts         # UI translations (EN/JP)
+│   └── locationExtractor.ts    # Extract cities from messages
 ├── page.tsx                    # Main application page
 └── globals.css                 # Global styles
 ```
@@ -110,26 +138,21 @@ Transcribes Japanese audio to text using Groq Whisper.
 **Request**: FormData with audio file
 **Response**: `{ text: string }`
 
-### GET /api/weather
-Fetches weather data from OpenWeather API.
-
-**Query Parameters**: 
-- `city`: City name (e.g., "Tokyo", "Osaka")
-- OR `lat` & `lon`: Coordinates
-
-**Response**: `{ data: WeatherData }`
-
 ### POST /api/chat
-Generates AI responses using Llama 3.3 70B.
+Generates AI responses with automatic location detection and weather fetching.
 
 **Request**: 
 ```json
 {
-  "message": "string",
-  "weatherData": "WeatherData | null"
+  "message": "string"
 }
 ```
 **Response**: Streaming text response
+
+**Features**:
+- Automatically extracts location from message
+- Fetches weather if it's a weather-related query
+- Provides context-aware agricultural advice
 
 ## Environment Variables
 
@@ -176,14 +199,34 @@ Ensure your platform supports:
 - Ensure audio is being recorded (red pulsing button)
 
 ### Weather data not loading
+- Check if your message mentions a city name
 - Verify your OpenWeather API key is correct
-- Check that the location name is correct (English names work best)
-- Free tier has 60 calls/minute limit
+- Try using common city names (Tokyo, Osaka, etc.)
 
 ### AI responses are slow
 - Groq provides fast inference, but network speed matters
 - Check your internet connection
 - Responses stream in real-time
+
+## Features in Detail
+
+### Automatic Location Detection
+The chatbot automatically detects city names from your questions in both English and Japanese:
+- Supports major Japanese cities (Tokyo, Osaka, Kyoto, etc.)
+- Supports international cities
+- Works with various question formats
+
+### Weather Integration
+When you ask about weather:
+1. Location is extracted from your question
+2. Current weather is fetched
+3. 5-day forecast is retrieved
+4. AI uses this data to provide contextual advice
+
+### Bilingual Support
+- **UI Language**: Toggle between English and Japanese
+- **Chat Language**: Bot responds in the language you use
+- All interface elements are translated
 
 ## License
 
