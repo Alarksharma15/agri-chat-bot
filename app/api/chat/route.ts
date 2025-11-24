@@ -117,9 +117,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { message } = body as { message: string };
+    const { message, conversationHistory } = body as { 
+      message: string;
+      conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    };
 
     console.log('📝 [Chat API] Received message:', message);
+    console.log('📚 [Chat API] Conversation history length:', conversationHistory?.length || 0);
 
     if (!message) {
       console.error('❌ [Chat API] No message provided');
@@ -130,7 +134,6 @@ export async function POST(request: NextRequest) {
     }
 
     const groq = getGroqProvider();
-    let contextMessage = message;
     let weatherData: WeatherData | null = null;
 
     // Extract location from message
@@ -151,7 +154,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build context with weather data if available
+    // Build messages array with conversation history
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+    // Add conversation history (keep last 10 messages for context)
+    if (conversationHistory && conversationHistory.length > 0) {
+      const recentHistory = conversationHistory.slice(-10);
+      messages.push(...recentHistory);
+      console.log('📖 [Chat API] Added', recentHistory.length, 'previous messages');
+    }
+
+    // Add current message with weather context if available
+    let currentMessage = message;
     if (weatherData) {
       const forecastSummary = weatherData.forecast
         ? weatherData.forecast
@@ -162,7 +176,7 @@ export async function POST(request: NextRequest) {
             .join('\n')
         : '';
 
-      contextMessage = `現在の天気情報:
+      currentMessage = `[現在の天気情報]
 場所: ${weatherData.location}, ${weatherData.country}
 気温: ${weatherData.temperature}°C (体感温度: ${weatherData.feelsLike}°C)
 湿度: ${weatherData.humidity}%
@@ -172,21 +186,22 @@ export async function POST(request: NextRequest) {
 5日間の予報:
 ${forecastSummary}
 
-ユーザーの質問: ${message}`;
+[ユーザーの質問]
+${message}`;
     }
 
-    console.log('🤖 [Chat API] Calling Llama 3.3 70B...');
+    messages.push({
+      role: 'user',
+      content: currentMessage,
+    });
+
+    console.log('🤖 [Chat API] Calling Llama 3.3 70B with', messages.length, 'messages...');
 
     // Stream response from Groq Llama 3.3 70b
     const result = await streamText({
       model: groq('llama-3.3-70b-versatile'),
       system: AGRICULTURE_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: contextMessage,
-        },
-      ],
+      messages: messages,
       temperature: 0.7,
     });
 

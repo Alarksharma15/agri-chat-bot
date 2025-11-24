@@ -29,8 +29,16 @@ export default function Home() {
         content: userMessage,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, userMessageObj]);
+      
+      // Build conversation history (exclude weather data from history)
+      const conversationHistory = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
 
+      console.log('📚 [Main] Including', conversationHistory.length, 'previous messages for context');
+
+      setMessages((prev) => [...prev, userMessageObj]);
       setIsLoadingChat(true);
 
       try {
@@ -42,6 +50,7 @@ export default function Home() {
           },
           body: JSON.stringify({
             message: userMessage,
+            conversationHistory: conversationHistory,
           }),
         });
 
